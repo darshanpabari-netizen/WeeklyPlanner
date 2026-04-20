@@ -1,0 +1,1407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Schedule Planner</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f0f3fa;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #d9e1ee;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+      --slot-height: 36px;
+      --time-col: 92px;
+      --radius: 12px;
+      --transition: 180ms ease;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-soft: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #374151;
+      --primary: #60a5fa;
+      --danger: #f87171;
+      --shadow: 0 14px 38px rgba(2, 6, 23, 0.65);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      padding: 16px;
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100vh;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      justify-content: space-between;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    select,
+    input,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background var(--transition), transform var(--transition), border-color var(--transition);
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: color-mix(in srgb, var(--panel-soft), var(--primary) 16%);
+      border-color: var(--primary);
+      outline: none;
+    }
+
+    button:active { transform: translateY(1px); }
+
+    .primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger), var(--line) 40%); }
+
+    .planner-shell {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: auto;
+      box-shadow: var(--shadow);
+      max-height: 70vh;
+    }
+
+    .planner-grid {
+      display: grid;
+      grid-template-columns: var(--time-col) repeat(7, minmax(160px, 1fr));
+      grid-template-rows: auto 1fr;
+      min-width: 1260px;
+      position: relative;
+    }
+
+    .corner,
+    .day-header,
+    .time-axis,
+    .day-column {
+      border-right: 1px solid var(--line);
+    }
+
+    .corner {
+      grid-column: 1;
+      grid-row: 1;
+      position: sticky;
+      top: 0;
+      left: 0;
+      z-index: 20;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      height: 52px;
+    }
+
+    .day-header {
+      grid-row: 1;
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 8px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .time-axis {
+      grid-column: 1;
+      grid-row: 2;
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      background: var(--panel);
+    }
+
+    .time-slot {
+      height: var(--slot-height);
+      border-bottom: 1px solid var(--line);
+      padding: 2px 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+
+    .time-slot.half { color: transparent; user-select: none; }
+
+    .day-column {
+      grid-row: 2;
+      position: relative;
+      background: var(--panel);
+      min-height: 200px;
+    }
+
+    .slots {
+      position: relative;
+      z-index: 1;
+    }
+
+    .slot {
+      height: var(--slot-height);
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .slot:hover,
+    .slot:focus-visible {
+      background: color-mix(in srgb, var(--primary), transparent 88%);
+      outline: none;
+    }
+
+    .events-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .event {
+      position: absolute;
+      border-radius: 8px;
+      padding: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: #fff;
+      overflow: hidden;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform var(--transition), filter var(--transition);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+      font-size: 0.78rem;
+      line-height: 1.25;
+    }
+
+    .event:hover,
+    .event:focus-visible {
+      filter: brightness(1.07);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .event-title {
+      font-weight: 600;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      margin-bottom: 2px;
+    }
+
+    .event-time {
+      opacity: 0.9;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    .event.short .event-title,
+    .event.short .event-time {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      -webkit-line-clamp: unset;
+    }
+
+    .summary {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .summary header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-content {
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: 160px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .bar {
+      background: var(--panel-soft);
+      border-radius: 999px;
+      overflow: hidden;
+      height: 12px;
+      border: 1px solid var(--line);
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      transition: width 220ms ease;
+    }
+
+    .muted { color: var(--muted); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.45);
+      display: none;
+      place-items: center;
+      padding: 16px;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+
+    .modal-backdrop.open {
+      display: grid;
+      opacity: 1;
+    }
+
+    .modal {
+      width: min(520px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      transform: translateY(8px);
+      transition: transform var(--transition);
+      max-height: 90vh;
+      overflow: auto;
+    }
+
+    .modal-backdrop.open .modal { transform: translateY(0); }
+
+    .modal header,
+    .modal footer {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal footer {
+      border-bottom: none;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .form-grid {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 4px;
+      font-size: 0.88rem;
+    }
+
+    input[type="text"],
+    select,
+    textarea,
+    input[type="time"] {
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      border-radius: 8px;
+      padding: 8px;
+    }
+
+    textarea { min-height: 72px; resize: vertical; }
+
+    .settings-panel {
+      width: min(720px, 100%);
+    }
+
+    .category-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .category-item {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      background: var(--panel-soft);
+    }
+
+    .swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+    }
+
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .narrow-warning {
+      display: none;
+      border: 1px solid color-mix(in srgb, var(--primary), var(--line) 55%);
+      background: color-mix(in srgb, var(--primary), transparent 92%);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+    }
+
+    [data-narrow="true"] .narrow-warning { display: block; }
+
+    .hidden { display: none !important; }
+
+    @media print {
+      .toolbar,
+      .summary,
+      .narrow-warning,
+      .modal-backdrop {
+        display: none !important;
+      }
+
+      .app { padding: 0; }
+      .planner-shell { max-height: none; border: none; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="appRoot">
+    <div class="toolbar" role="region" aria-label="Planner controls">
+      <div class="toolbar-left">
+        <h1>Weekly Planner</h1>
+        <button id="newEventBtn" class="primary" aria-label="Add new event">+ New event</button>
+        <button id="summaryToggleBtn" aria-expanded="true" aria-controls="summaryPanel">Summary</button>
+      </div>
+      <div class="toolbar-right">
+        <button id="exportBtn" aria-label="Export schedule">Export JSON</button>
+        <button id="importBtn" aria-label="Import schedule">Import JSON</button>
+        <button id="settingsBtn" aria-label="Open settings">⚙ Settings</button>
+        <input id="importInput" class="hidden" type="file" accept="application/json" aria-label="Import schedule file" />
+      </div>
+    </div>
+
+    <p class="narrow-warning" id="narrowWarning">
+      This planner is best on wider screens. For a better experience, widen the window.
+    </p>
+
+    <section class="planner-shell" aria-label="Weekly planner grid">
+      <div id="plannerGrid" class="planner-grid"></div>
+    </section>
+
+    <section class="summary" id="summaryPanel" aria-live="polite">
+      <header>
+        <strong>Weekly Summary</strong>
+        <span class="muted" id="totalHoursText">0 h total</span>
+      </header>
+      <div id="summaryContent" class="summary-content"></div>
+    </section>
+  </div>
+
+  <div id="eventModalBackdrop" class="modal-backdrop" role="presentation">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+      <header>
+        <strong id="eventModalTitle">Add event</strong>
+      </header>
+      <form id="eventForm" class="form-grid">
+        <label>
+          Name
+          <input id="eventName" type="text" required aria-label="Event name" maxlength="120" />
+        </label>
+        <label>
+          Day
+          <select id="eventDay" aria-label="Event day"></select>
+        </label>
+        <div class="inline">
+          <label style="flex:1; min-width: 170px;">
+            Start time
+            <select id="eventStart" aria-label="Event start time"></select>
+          </label>
+          <label style="flex:1; min-width: 170px;">
+            End time
+            <select id="eventEnd" aria-label="Event end time"></select>
+          </label>
+        </div>
+        <label>
+          Category
+          <select id="eventCategory" required aria-label="Event category"></select>
+        </label>
+        <label>
+          Notes (optional)
+          <textarea id="eventNotes" aria-label="Event notes" maxlength="1200"></textarea>
+        </label>
+      </form>
+      <footer>
+        <div class="inline">
+          <button id="deleteEventBtn" type="button" class="danger hidden" aria-label="Delete event">Delete</button>
+        </div>
+        <div class="inline">
+          <button id="cancelEventBtn" type="button" aria-label="Cancel event modal">Cancel</button>
+          <button id="saveEventBtn" type="button" class="primary" aria-label="Save event">Save</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <div id="settingsModalBackdrop" class="modal-backdrop" role="presentation">
+    <div class="modal settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header>
+        <strong id="settingsTitle">Settings</strong>
+      </header>
+      <div class="form-grid">
+        <div class="inline">
+          <label style="flex:1; min-width: 170px;">
+            Visible range start
+            <select id="startRangeSelect" aria-label="Visible range start"></select>
+          </label>
+          <label style="flex:1; min-width: 170px;">
+            Visible range end
+            <select id="endRangeSelect" aria-label="Visible range end"></select>
+          </label>
+        </div>
+
+        <label class="inline" style="justify-content: space-between;">
+          <span>Dark theme</span>
+          <input id="themeToggle" type="checkbox" aria-label="Toggle dark theme" />
+        </label>
+
+        <div>
+          <strong>Categories</strong>
+          <div id="categoryList" class="category-list" style="margin-top:8px;"></div>
+          <div class="inline" style="margin-top:8px;">
+            <input id="newCategoryName" type="text" placeholder="New category name" aria-label="New category name" maxlength="40" />
+            <input id="newCategoryColor" type="color" value="#0ea5e9" aria-label="New category color" />
+            <button id="addCategoryBtn" type="button" aria-label="Add category">Add category</button>
+          </div>
+        </div>
+
+        <button id="clearEventsBtn" type="button" class="danger" aria-label="Clear all events">Clear all events</button>
+      </div>
+      <footer>
+        <div></div>
+        <button id="closeSettingsBtn" type="button" class="primary" aria-label="Close settings">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "weekly-planner-v1";
+      const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      const SLOT_MINUTES = 30;
+      const DEFAULT_START = 12; // 06:00
+      const DEFAULT_END = 46;   // 23:00
+      const SLOT_HEIGHT = 36;
+
+      const defaultCategories = [
+        { id: "work", name: "Work", color: "#3b82f6" },
+        { id: "learning", name: "Learning", color: "#22c55e" },
+        { id: "travel", name: "Travel", color: "#6b7280" },
+        { id: "entertainment", name: "Entertainment", color: "#8b5cf6" },
+        { id: "personal", name: "Personal", color: "#f59e0b" }
+      ];
+
+      const state = loadState();
+      let eventModalMode = "create";
+      let editingEventId = null;
+      let lastFocusedElement = null;
+
+      const el = {
+        appRoot: document.getElementById("appRoot"),
+        plannerGrid: document.getElementById("plannerGrid"),
+        newEventBtn: document.getElementById("newEventBtn"),
+        summaryToggleBtn: document.getElementById("summaryToggleBtn"),
+        summaryPanel: document.getElementById("summaryPanel"),
+        summaryContent: document.getElementById("summaryContent"),
+        totalHoursText: document.getElementById("totalHoursText"),
+        exportBtn: document.getElementById("exportBtn"),
+        importBtn: document.getElementById("importBtn"),
+        importInput: document.getElementById("importInput"),
+        settingsBtn: document.getElementById("settingsBtn"),
+        narrowWarning: document.getElementById("narrowWarning"),
+
+        eventModalBackdrop: document.getElementById("eventModalBackdrop"),
+        eventModalTitle: document.getElementById("eventModalTitle"),
+        eventForm: document.getElementById("eventForm"),
+        eventName: document.getElementById("eventName"),
+        eventDay: document.getElementById("eventDay"),
+        eventStart: document.getElementById("eventStart"),
+        eventEnd: document.getElementById("eventEnd"),
+        eventCategory: document.getElementById("eventCategory"),
+        eventNotes: document.getElementById("eventNotes"),
+        saveEventBtn: document.getElementById("saveEventBtn"),
+        cancelEventBtn: document.getElementById("cancelEventBtn"),
+        deleteEventBtn: document.getElementById("deleteEventBtn"),
+
+        settingsModalBackdrop: document.getElementById("settingsModalBackdrop"),
+        startRangeSelect: document.getElementById("startRangeSelect"),
+        endRangeSelect: document.getElementById("endRangeSelect"),
+        themeToggle: document.getElementById("themeToggle"),
+        categoryList: document.getElementById("categoryList"),
+        newCategoryName: document.getElementById("newCategoryName"),
+        newCategoryColor: document.getElementById("newCategoryColor"),
+        addCategoryBtn: document.getElementById("addCategoryBtn"),
+        clearEventsBtn: document.getElementById("clearEventsBtn"),
+        closeSettingsBtn: document.getElementById("closeSettingsBtn")
+      };
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return makeDefaultState();
+          const parsed = JSON.parse(raw);
+          const categories = Array.isArray(parsed.categories) && parsed.categories.length
+            ? parsed.categories
+            : defaultCategories;
+          return {
+            events: Array.isArray(parsed.events) ? parsed.events : [],
+            categories,
+            settings: {
+              startSlot: normalizeSlot(parsed.settings?.startSlot, DEFAULT_START),
+              endSlot: normalizeSlot(parsed.settings?.endSlot, DEFAULT_END),
+              theme: parsed.settings?.theme === "dark" ? "dark" : "light",
+              summaryOpen: parsed.settings?.summaryOpen !== false
+            }
+          };
+        } catch {
+          return makeDefaultState();
+        }
+      }
+
+      function normalizeSlot(slot, fallback) {
+        if (!Number.isInteger(slot)) return fallback;
+        if (slot < 0 || slot > 48) return fallback;
+        return slot;
+      }
+
+      function makeDefaultState() {
+        return {
+          events: [],
+          categories: JSON.parse(JSON.stringify(defaultCategories)),
+          settings: {
+            startSlot: DEFAULT_START,
+            endSlot: DEFAULT_END,
+            theme: "light",
+            summaryOpen: true
+          }
+        };
+      }
+
+      function persist() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+
+      function toLabel(slotIndex) {
+        const minutes = slotIndex * SLOT_MINUTES;
+        const h24 = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        const h12 = ((h24 + 11) % 12) + 1;
+        const meridiem = h24 >= 12 ? "PM" : "AM";
+        return `${h12}:${String(mins).padStart(2, "0")} ${meridiem}`;
+      }
+
+      function durationHours(start, end) {
+        return (end - start) * SLOT_MINUTES / 60;
+      }
+
+      function eventDisplayTime(event) {
+        return `${toLabel(event.startSlot)} – ${toLabel(event.endSlot)}`;
+      }
+
+      function categoryById(id) {
+        return state.categories.find(c => c.id === id);
+      }
+
+      function sanitize(text) {
+        return String(text || "").replace(/[&<>'"]/g, char => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "'": "&#39;",
+          '"': "&quot;"
+        }[char]));
+      }
+
+      function makeId(prefix) {
+        if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
+        return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function render() {
+        applyTheme();
+        renderPlanner();
+        renderSummary();
+        renderSummaryVisibility();
+        renderCategorySelectOptions();
+        renderSettingsPanel();
+        syncResponsiveWarning();
+      }
+
+      function applyTheme() {
+        document.documentElement.setAttribute("data-theme", state.settings.theme);
+        el.themeToggle.checked = state.settings.theme === "dark";
+      }
+
+      function renderPlanner() {
+        const startSlot = state.settings.startSlot;
+        const endSlot = state.settings.endSlot;
+        const slotCount = endSlot - startSlot;
+
+        if (slotCount <= 0) {
+          el.plannerGrid.innerHTML = "<p style='padding:12px;'>Invalid time range. Update settings.</p>";
+          return;
+        }
+
+        document.documentElement.style.setProperty("--slot-height", `${SLOT_HEIGHT}px`);
+
+        let html = `<div class="corner" aria-hidden="true"></div>`;
+        DAYS.forEach((day, index) => {
+          html += `<div class="day-header" style="grid-column:${index + 2};" role="columnheader">${day}</div>`;
+        });
+
+        html += `<div class="time-axis">`;
+        for (let slot = startSlot; slot < endSlot; slot += 1) {
+          const isHalfHour = slot % 2 === 1;
+          html += `<div class="time-slot ${isHalfHour ? "half" : ""}">${isHalfHour ? "" : toLabel(slot)}</div>`;
+        }
+        html += `</div>`;
+
+        DAYS.forEach((day, dayIndex) => {
+          html += `<div class="day-column" style="grid-column:${dayIndex + 2};">`;
+          html += `<div class="slots" aria-label="${day} schedule">`;
+          for (let slot = startSlot; slot < endSlot; slot += 1) {
+            html += `<div class="slot" tabindex="0" role="button" aria-label="Add event ${day} ${toLabel(slot)}" data-day-index="${dayIndex}" data-slot="${slot}"></div>`;
+          }
+          html += `</div>`;
+          html += `<div class="events-layer" data-events-day="${dayIndex}"></div>`;
+          html += `</div>`;
+        });
+
+        el.plannerGrid.innerHTML = html;
+        renderEvents();
+      }
+
+      function renderEvents() {
+        const startSlot = state.settings.startSlot;
+        const endSlot = state.settings.endSlot;
+        const dayLayers = Array.from(document.querySelectorAll("[data-events-day]"));
+        dayLayers.forEach(layer => layer.innerHTML = "");
+
+        for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+          const dayEvents = state.events
+            .filter(event => event.day === dayIndex)
+            .sort((a, b) => a.startSlot - b.startSlot || a.endSlot - b.endSlot);
+
+          const groups = [];
+          let currentGroup = [];
+          let currentMaxEnd = -1;
+
+          dayEvents.forEach(event => {
+            if (!currentGroup.length || event.startSlot < currentMaxEnd) {
+              currentGroup.push(event);
+              currentMaxEnd = Math.max(currentMaxEnd, event.endSlot);
+            } else {
+              groups.push(currentGroup);
+              currentGroup = [event];
+              currentMaxEnd = event.endSlot;
+            }
+          });
+          if (currentGroup.length) groups.push(currentGroup);
+
+          const layer = dayLayers[dayIndex];
+          if (!layer) continue;
+
+          groups.forEach(group => {
+            const sorted = [...group].sort((a, b) => a.startSlot - b.startSlot || a.endSlot - b.endSlot);
+            const colEnds = [];
+            const placements = [];
+
+            sorted.forEach(event => {
+              let col = colEnds.findIndex(end => end <= event.startSlot);
+              if (col === -1) {
+                col = colEnds.length;
+                colEnds.push(event.endSlot);
+              } else {
+                colEnds[col] = event.endSlot;
+              }
+              placements.push({ event, col });
+            });
+
+            const columns = Math.max(1, colEnds.length);
+            placements.forEach(({ event, col }) => {
+              if (event.endSlot <= startSlot || event.startSlot >= endSlot) return;
+
+              const clippedStart = Math.max(event.startSlot, startSlot);
+              const clippedEnd = Math.min(event.endSlot, endSlot);
+              const top = (clippedStart - startSlot) * SLOT_HEIGHT + 1;
+              const height = Math.max(16, (clippedEnd - clippedStart) * SLOT_HEIGHT - 2);
+              const widthPct = 100 / columns;
+              const leftPct = widthPct * col;
+              const category = categoryById(event.categoryId);
+              const color = category?.color || "#64748b";
+              const safeName = sanitize(event.name);
+              const safeNotes = sanitize(event.notes || "");
+
+              const eventEl = document.createElement("button");
+              eventEl.type = "button";
+              eventEl.className = `event ${height < 42 ? "short" : ""}`;
+              eventEl.style.top = `${top}px`;
+              eventEl.style.height = `${height}px`;
+              eventEl.style.left = `calc(${leftPct}% + 2px)`;
+              eventEl.style.width = `calc(${widthPct}% - 4px)`;
+              eventEl.style.background = color;
+              eventEl.setAttribute("aria-label", `${event.name}, ${DAYS[event.day]}, ${eventDisplayTime(event)}`);
+              eventEl.setAttribute("data-event-id", event.id);
+              eventEl.insertAdjacentHTML(
+                "beforeend",
+                `<div class="event-title">${safeName}</div><div class="event-time">${eventDisplayTime(event)}</div>`
+              );
+              eventEl.setAttribute(
+                "title",
+                safeNotes ? `${safeName}\n${eventDisplayTime(event)}\n${safeNotes}` : `${safeName}\n${eventDisplayTime(event)}`
+              );
+              layer.appendChild(eventEl);
+            });
+          });
+        }
+      }
+
+      function renderSummary() {
+        const totals = new Map(state.categories.map(c => [c.id, 0]));
+        let totalHours = 0;
+        state.events.forEach(event => {
+          const hours = durationHours(event.startSlot, event.endSlot);
+          totalHours += hours;
+          totals.set(event.categoryId, (totals.get(event.categoryId) || 0) + hours);
+        });
+
+        el.totalHoursText.textContent = `${round2(totalHours)} h total`;
+        const rows = state.categories
+          .map(category => {
+            const hours = totals.get(category.id) || 0;
+            return {
+              ...category,
+              hours,
+              pct: totalHours ? (hours / totalHours) * 100 : 0
+            };
+          })
+          .filter(row => row.hours > 0)
+          .sort((a, b) => b.hours - a.hours);
+
+        if (!rows.length) {
+          el.summaryContent.innerHTML = `<p class="muted">No events yet. Add events to see your weekly hour split.</p>`;
+          return;
+        }
+
+        el.summaryContent.innerHTML = rows.map(row => `
+          <div class="summary-row">
+            <div>${sanitize(row.name)}</div>
+            <div class="bar" aria-hidden="true"><div class="bar-fill" style="width:${Math.max(0, Math.min(100, row.pct))}%; background:${row.color};"></div></div>
+            <div>${round2(row.hours)} h (${round2(row.pct)}%)</div>
+          </div>
+        `).join("");
+      }
+
+      function renderSummaryVisibility() {
+        const open = !!state.settings.summaryOpen;
+        el.summaryPanel.classList.toggle("hidden", !open);
+        el.summaryToggleBtn.textContent = open ? "Hide Summary" : "Show Summary";
+        el.summaryToggleBtn.setAttribute("aria-expanded", String(open));
+      }
+
+      function renderCategorySelectOptions() {
+        const options = state.categories
+          .map(category => `<option value="${category.id}">${sanitize(category.name)}</option>`)
+          .join("");
+        el.eventCategory.innerHTML = options;
+      }
+
+      function renderSettingsPanel() {
+        const timeOptions = createTimeOptions(0, 48);
+        el.startRangeSelect.innerHTML = timeOptions;
+        el.endRangeSelect.innerHTML = timeOptions;
+        el.startRangeSelect.value = String(state.settings.startSlot);
+        el.endRangeSelect.value = String(state.settings.endSlot);
+
+        el.categoryList.innerHTML = "";
+        state.categories.forEach(category => {
+          const row = document.createElement("div");
+          row.className = "category-item";
+          row.innerHTML = `
+            <span class="swatch" style="background:${category.color};"></span>
+            <div class="inline" style="justify-content: space-between; width:100%;">
+              <input type="text" value="${sanitize(category.name)}" maxlength="40" aria-label="Category name for ${sanitize(category.name)}" data-cat-name="${category.id}" style="min-width:150px; flex:1;" />
+              <input type="color" value="${category.color}" aria-label="Category color for ${sanitize(category.name)}" data-cat-color="${category.id}" />
+            </div>
+            <button type="button" data-cat-delete="${category.id}" aria-label="Delete ${sanitize(category.name)}">Delete</button>
+          `;
+          el.categoryList.appendChild(row);
+        });
+      }
+
+      function createTimeOptions(start, end) {
+        let out = "";
+        for (let slot = start; slot <= end; slot += 1) {
+          out += `<option value="${slot}">${toLabel(slot)}</option>`;
+        }
+        return out;
+      }
+
+      function openEventModal(mode, seed = {}) {
+        eventModalMode = mode;
+        editingEventId = seed.id || null;
+        lastFocusedElement = document.activeElement;
+
+        populateEventFormOptions();
+        if (mode === "edit") {
+          el.eventModalTitle.textContent = "Edit event";
+          el.deleteEventBtn.classList.remove("hidden");
+          el.eventName.value = seed.name || "";
+          el.eventDay.value = String(seed.day);
+          el.eventStart.value = String(seed.startSlot);
+          el.eventEnd.value = String(seed.endSlot);
+          el.eventCategory.value = seed.categoryId || state.categories[0]?.id || "";
+          el.eventNotes.value = seed.notes || "";
+        } else {
+          el.eventModalTitle.textContent = "Add event";
+          el.deleteEventBtn.classList.add("hidden");
+          const fallbackDay = Number.isInteger(seed.day) ? seed.day : 0;
+          const fallbackStart = Number.isInteger(seed.startSlot) ? seed.startSlot : state.settings.startSlot;
+          const fallbackEnd = Math.min(state.settings.endSlot, fallbackStart + 2);
+          el.eventName.value = "";
+          el.eventDay.value = String(fallbackDay);
+          el.eventStart.value = String(fallbackStart);
+          el.eventEnd.value = String(Math.max(fallbackStart + 1, fallbackEnd));
+          el.eventCategory.value = state.categories[0]?.id || "";
+          el.eventNotes.value = "";
+        }
+
+        el.eventModalBackdrop.classList.add("open");
+        trapFocus(el.eventModalBackdrop);
+        setTimeout(() => el.eventName.focus(), 0);
+      }
+
+      function closeEventModal() {
+        el.eventModalBackdrop.classList.remove("open");
+        releaseFocusTrap(el.eventModalBackdrop);
+        if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
+      }
+
+      function populateEventFormOptions() {
+        el.eventDay.innerHTML = DAYS.map((day, index) => `<option value="${index}">${day}</option>`).join("");
+
+        const start = state.settings.startSlot;
+        const end = state.settings.endSlot;
+        const timeOptions = [];
+        for (let slot = start; slot <= end; slot += 1) {
+          timeOptions.push(`<option value="${slot}">${toLabel(slot)}</option>`);
+        }
+        const html = timeOptions.join("");
+        el.eventStart.innerHTML = html;
+        el.eventEnd.innerHTML = html;
+        renderCategorySelectOptions();
+      }
+
+      function saveEventFromModal() {
+        const name = el.eventName.value.trim();
+        const day = Number(el.eventDay.value);
+        const startSlot = Number(el.eventStart.value);
+        const endSlot = Number(el.eventEnd.value);
+        const categoryId = el.eventCategory.value;
+        const notes = el.eventNotes.value.trim();
+
+        if (!name) {
+          alert("Event name is required.");
+          el.eventName.focus();
+          return;
+        }
+        if (!categoryId || !categoryById(categoryId)) {
+          alert("Category is required.");
+          el.eventCategory.focus();
+          return;
+        }
+        if (!(endSlot > startSlot)) {
+          alert("End time must be after start time.");
+          el.eventEnd.focus();
+          return;
+        }
+
+        const payload = {
+          id: editingEventId || makeId("event"),
+          name,
+          day,
+          startSlot,
+          endSlot,
+          categoryId,
+          notes
+        };
+
+        if (eventModalMode === "edit") {
+          const index = state.events.findIndex(event => event.id === editingEventId);
+          if (index >= 0) state.events[index] = payload;
+        } else {
+          state.events.push(payload);
+        }
+
+        persist();
+        closeEventModal();
+        render();
+      }
+
+      function deleteEditingEvent() {
+        if (!editingEventId) return;
+        const event = state.events.find(e => e.id === editingEventId);
+        if (!event) return;
+        if (!confirm(`Delete "${event.name}"?`)) return;
+        state.events = state.events.filter(e => e.id !== editingEventId);
+        persist();
+        closeEventModal();
+        render();
+      }
+
+      function openSettingsModal() {
+        lastFocusedElement = document.activeElement;
+        renderSettingsPanel();
+        el.settingsModalBackdrop.classList.add("open");
+        trapFocus(el.settingsModalBackdrop);
+        setTimeout(() => el.startRangeSelect.focus(), 0);
+      }
+
+      function closeSettingsModal() {
+        el.settingsModalBackdrop.classList.remove("open");
+        releaseFocusTrap(el.settingsModalBackdrop);
+        if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
+      }
+
+      function tryDeleteCategory(categoryId) {
+        const category = categoryById(categoryId);
+        if (!category) return;
+
+        if (state.categories.length <= 1) {
+          alert("At least one category is required.");
+          return;
+        }
+
+        const linked = state.events.filter(event => event.categoryId === categoryId);
+        if (linked.length) {
+          const alternatives = state.categories.filter(c => c.id !== categoryId);
+          const labels = alternatives.map(c => c.name).join(", ");
+          const choice = prompt(
+            `"${category.name}" has ${linked.length} event(s). Type a replacement category name to reassign them, or Cancel to abort.\nAvailable: ${labels}`
+          );
+          if (choice === null) return;
+          const replacement = alternatives.find(c => c.name.toLowerCase() === choice.trim().toLowerCase());
+          if (!replacement) {
+            alert("No matching replacement category found.");
+            return;
+          }
+          state.events.forEach(event => {
+            if (event.categoryId === categoryId) event.categoryId = replacement.id;
+          });
+        } else if (!confirm(`Delete category "${category.name}"?`)) {
+          return;
+        }
+
+        state.categories = state.categories.filter(c => c.id !== categoryId);
+        persist();
+        render();
+      }
+
+      function addCategory() {
+        const name = el.newCategoryName.value.trim();
+        const color = el.newCategoryColor.value;
+        if (!name) {
+          alert("Enter a category name.");
+          return;
+        }
+        if (state.categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+          alert("Category name already exists.");
+          return;
+        }
+        state.categories.push({ id: makeId("cat"), name, color });
+        el.newCategoryName.value = "";
+        persist();
+        render();
+      }
+
+      function exportData() {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "weekly-planner-export.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function importData(file) {
+        if (!file) return;
+        if (!confirm("Importing will overwrite your current schedule. Continue?")) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(String(reader.result || "{}"));
+            if (!Array.isArray(parsed.categories) || !Array.isArray(parsed.events) || typeof parsed.settings !== "object") {
+              throw new Error("Invalid format");
+            }
+
+            state.categories = parsed.categories.length ? parsed.categories : JSON.parse(JSON.stringify(defaultCategories));
+            state.events = parsed.events.filter(event =>
+              typeof event.name === "string" &&
+              Number.isInteger(event.day) &&
+              Number.isInteger(event.startSlot) &&
+              Number.isInteger(event.endSlot)
+            );
+            state.settings = {
+              startSlot: normalizeSlot(parsed.settings.startSlot, DEFAULT_START),
+              endSlot: normalizeSlot(parsed.settings.endSlot, DEFAULT_END),
+              theme: parsed.settings.theme === "dark" ? "dark" : "light",
+              summaryOpen: parsed.settings.summaryOpen !== false
+            };
+
+            if (state.settings.endSlot <= state.settings.startSlot) {
+              state.settings.startSlot = DEFAULT_START;
+              state.settings.endSlot = DEFAULT_END;
+            }
+
+            // Ensure events keep valid categories after import.
+            const categoryIds = new Set(state.categories.map(c => c.id));
+            if (!state.categories.length) {
+              state.categories = JSON.parse(JSON.stringify(defaultCategories));
+            }
+            const fallbackCategory = state.categories[0]?.id;
+            state.events.forEach(event => {
+              if (!categoryIds.has(event.categoryId)) event.categoryId = fallbackCategory;
+            });
+
+            persist();
+            render();
+          } catch {
+            alert("Import failed: invalid JSON structure.");
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function round2(n) {
+        return (Math.round(n * 100) / 100).toFixed(n % 1 ? 2 : 0);
+      }
+
+      function trapFocus(modalBackdrop) {
+        const modal = modalBackdrop.querySelector(".modal");
+        if (!modal) return;
+
+        function onKeyDown(e) {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            if (modalBackdrop === el.eventModalBackdrop) closeEventModal();
+            if (modalBackdrop === el.settingsModalBackdrop) closeSettingsModal();
+            return;
+          }
+          if (e.key !== "Tab") return;
+
+          const focusable = Array.from(modal.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )).filter(node => !node.hasAttribute("disabled") && !node.classList.contains("hidden"));
+          if (!focusable.length) return;
+
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+
+        modalBackdrop.__focusTrapHandler = onKeyDown;
+        document.addEventListener("keydown", onKeyDown);
+      }
+
+      function releaseFocusTrap(modalBackdrop) {
+        if (modalBackdrop.__focusTrapHandler) {
+          document.removeEventListener("keydown", modalBackdrop.__focusTrapHandler);
+          modalBackdrop.__focusTrapHandler = null;
+        }
+      }
+
+      function syncResponsiveWarning() {
+        const narrow = window.innerWidth < 1050;
+        el.appRoot.setAttribute("data-narrow", String(narrow));
+      }
+
+      function bindEvents() {
+        el.newEventBtn.addEventListener("click", () => openEventModal("create"));
+        el.summaryToggleBtn.addEventListener("click", () => {
+          state.settings.summaryOpen = !state.settings.summaryOpen;
+          persist();
+          renderSummaryVisibility();
+        });
+
+        el.exportBtn.addEventListener("click", exportData);
+        el.importBtn.addEventListener("click", () => el.importInput.click());
+        el.importInput.addEventListener("change", (e) => {
+          importData(e.target.files?.[0]);
+          e.target.value = "";
+        });
+
+        el.settingsBtn.addEventListener("click", openSettingsModal);
+        el.closeSettingsBtn.addEventListener("click", closeSettingsModal);
+
+        el.saveEventBtn.addEventListener("click", saveEventFromModal);
+        el.cancelEventBtn.addEventListener("click", closeEventModal);
+        el.deleteEventBtn.addEventListener("click", deleteEditingEvent);
+
+        el.eventStart.addEventListener("change", () => {
+          const start = Number(el.eventStart.value);
+          const end = Number(el.eventEnd.value);
+          if (end <= start) el.eventEnd.value = String(start + 1);
+        });
+
+        el.startRangeSelect.addEventListener("change", () => {
+          const start = Number(el.startRangeSelect.value);
+          const end = Number(el.endRangeSelect.value);
+          if (end <= start + 1) {
+            alert("End time must be at least 30 minutes after start.");
+            el.startRangeSelect.value = String(state.settings.startSlot);
+            return;
+          }
+          state.settings.startSlot = start;
+          persist();
+          render();
+        });
+
+        el.endRangeSelect.addEventListener("change", () => {
+          const start = Number(el.startRangeSelect.value);
+          const end = Number(el.endRangeSelect.value);
+          if (end <= start + 1) {
+            alert("End time must be at least 30 minutes after start.");
+            el.endRangeSelect.value = String(state.settings.endSlot);
+            return;
+          }
+          state.settings.endSlot = end;
+          persist();
+          render();
+        });
+
+        el.themeToggle.addEventListener("change", () => {
+          state.settings.theme = el.themeToggle.checked ? "dark" : "light";
+          persist();
+          applyTheme();
+        });
+
+        el.addCategoryBtn.addEventListener("click", addCategory);
+
+        el.categoryList.addEventListener("input", (e) => {
+          const nameId = e.target.getAttribute("data-cat-name");
+          if (nameId) {
+            const category = categoryById(nameId);
+            if (!category) return;
+            category.name = e.target.value.slice(0, 40) || category.name;
+            persist();
+            renderCategorySelectOptions();
+            renderSummary();
+            return;
+          }
+
+          const colorId = e.target.getAttribute("data-cat-color");
+          if (colorId) {
+            const category = categoryById(colorId);
+            if (!category) return;
+            category.color = e.target.value;
+            persist();
+            render();
+          }
+        });
+
+        el.categoryList.addEventListener("focusout", (e) => {
+          const nameId = e.target.getAttribute("data-cat-name");
+          if (!nameId) return;
+          const category = categoryById(nameId);
+          if (!category) return;
+          const trimmed = e.target.value.trim();
+          if (!trimmed) {
+            e.target.value = category.name;
+            return;
+          }
+          const duplicate = state.categories.some(c => c.id !== category.id && c.name.toLowerCase() === trimmed.toLowerCase());
+          if (duplicate) {
+            alert("Category name already exists.");
+            e.target.value = category.name;
+            return;
+          }
+          category.name = trimmed;
+          persist();
+          render();
+        });
+
+        el.categoryList.addEventListener("click", (e) => {
+          const deleteId = e.target.getAttribute("data-cat-delete");
+          if (deleteId) tryDeleteCategory(deleteId);
+        });
+
+        el.clearEventsBtn.addEventListener("click", () => {
+          if (!confirm("Clear all events? This cannot be undone.")) return;
+          state.events = [];
+          persist();
+          render();
+        });
+
+        el.eventModalBackdrop.addEventListener("click", (e) => {
+          if (e.target === el.eventModalBackdrop) closeEventModal();
+        });
+
+        el.settingsModalBackdrop.addEventListener("click", (e) => {
+          if (e.target === el.settingsModalBackdrop) closeSettingsModal();
+        });
+
+        document.addEventListener("keydown", (e) => {
+          const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+          if ((e.key === "n" || e.key === "N") && !isTyping && !el.eventModalBackdrop.classList.contains("open") && !el.settingsModalBackdrop.classList.contains("open")) {
+            e.preventDefault();
+            openEventModal("create");
+          }
+        });
+
+        el.plannerGrid.addEventListener("click", (e) => {
+          const slot = e.target.closest(".slot");
+          if (slot) {
+            const day = Number(slot.getAttribute("data-day-index"));
+            const startSlot = Number(slot.getAttribute("data-slot"));
+            openEventModal("create", { day, startSlot });
+            return;
+          }
+
+          const eventNode = e.target.closest(".event");
+          if (eventNode) {
+            const id = eventNode.getAttribute("data-event-id");
+            const eventData = state.events.find(event => event.id === id);
+            if (eventData) openEventModal("edit", eventData);
+          }
+        });
+
+        el.plannerGrid.addEventListener("keydown", (e) => {
+          if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("slot")) {
+            e.preventDefault();
+            const day = Number(e.target.getAttribute("data-day-index"));
+            const startSlot = Number(e.target.getAttribute("data-slot"));
+            openEventModal("create", { day, startSlot });
+          }
+        });
+
+        window.addEventListener("resize", syncResponsiveWarning);
+      }
+
+      function ensureValidState() {
+        if (!state.categories.length) {
+          state.categories = JSON.parse(JSON.stringify(defaultCategories));
+        }
+
+        if (state.settings.endSlot <= state.settings.startSlot + 1) {
+          state.settings.startSlot = DEFAULT_START;
+          state.settings.endSlot = DEFAULT_END;
+        }
+
+        const validCategoryIds = new Set(state.categories.map(c => c.id));
+        const fallbackCategoryId = state.categories[0].id;
+        state.events = state.events
+          .filter(event => Number.isInteger(event.day) && event.day >= 0 && event.day <= 6)
+          .map(event => ({
+            ...event,
+            id: event.id || makeId("event"),
+            name: String(event.name || "Untitled"),
+            notes: String(event.notes || ""),
+            startSlot: Math.max(0, Math.min(47, Number(event.startSlot))),
+            endSlot: Math.max(1, Math.min(48, Number(event.endSlot))),
+            categoryId: validCategoryIds.has(event.categoryId) ? event.categoryId : fallbackCategoryId
+          }))
+          .filter(event => event.endSlot > event.startSlot);
+      }
+
+      ensureValidState();
+      persist();
+      bindEvents();
+      render();
+    })();
+  </script>
+</body>
+</html>
