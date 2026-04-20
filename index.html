@@ -814,7 +814,6 @@
               const category = categoryById(event.categoryId);
               const color = category?.color || "#64748b";
               const safeNotes = sanitize(event.notes || "");
-              const title = safeNotes ? ` title="${sanitize(event.name)}\n${eventDisplayTime(event)}\n${safeNotes}"` : ` title="${sanitize(event.name)}\n${eventDisplayTime(event)}"`;
 
               const eventEl = document.createElement("button");
               eventEl.type = "button";
@@ -830,7 +829,10 @@
                 "beforeend",
                 `<div class="event-title">${sanitize(event.name)}</div><div class="event-time">${eventDisplayTime(event)}</div>`
               );
-              if (title) eventEl.setAttribute("title", safeNotes ? `${event.name}\n${eventDisplayTime(event)}\n${event.notes}` : `${event.name}\n${eventDisplayTime(event)}`);
+              eventEl.setAttribute(
+                "title",
+                safeNotes ? `${event.name}\n${eventDisplayTime(event)}\n${event.notes}` : `${event.name}\n${eventDisplayTime(event)}`
+              );
               layer.appendChild(eventEl);
             });
           });
