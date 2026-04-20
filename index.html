@@ -697,7 +697,7 @@
       }
 
       function makeId(prefix) {
-        if (window.crypto?.randomUUID) return `${prefix}-${crypto.randomUUID()}`;
+        if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
         return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       }
 
@@ -813,6 +813,7 @@
               const leftPct = widthPct * col;
               const category = categoryById(event.categoryId);
               const color = category?.color || "#64748b";
+              const safeName = sanitize(event.name);
               const safeNotes = sanitize(event.notes || "");
 
               const eventEl = document.createElement("button");
@@ -827,11 +828,11 @@
               eventEl.setAttribute("data-event-id", event.id);
               eventEl.insertAdjacentHTML(
                 "beforeend",
-                `<div class="event-title">${sanitize(event.name)}</div><div class="event-time">${eventDisplayTime(event)}</div>`
+                `<div class="event-title">${safeName}</div><div class="event-time">${eventDisplayTime(event)}</div>`
               );
               eventEl.setAttribute(
                 "title",
-                safeNotes ? `${event.name}\n${eventDisplayTime(event)}\n${event.notes}` : `${event.name}\n${eventDisplayTime(event)}`
+                safeNotes ? `${safeName}\n${eventDisplayTime(event)}\n${safeNotes}` : `${safeName}\n${eventDisplayTime(event)}`
               );
               layer.appendChild(eventEl);
             });
